@@ -13,7 +13,7 @@ Replace `HUB_CONTEXT_NAME` with the hub's kubeconfig context, and `HUB_KUBECONFI
 current context is the hub.
 
 If the cluster ran an AI Grid hub before, uninstall that hub first
-([uninstall](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/195ccd7ab783d5154549c597fef4b20dc12acd91/docs/install/operate.md#uninstall)).
+([uninstall](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/2a96b90291a23a9fbd044ca2e3decdba1e09fae4/docs/install/operate.md#uninstall)).
 
 ## 1. Add a break-glass admin
 
@@ -29,7 +29,7 @@ generates a password into that file if it doesn't exist and never prints it.
 
 You should see the script confirm the sign-in. Sign in once in the web console as `admin` with the `htpasswd`
 provider. Never delete an identity provider, or the namespace that runs it, that your platform's sign-in depends on
-([cluster sign-in and admins](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/195ccd7ab783d5154549c597fef4b20dc12acd91/docs/install/hub/00-platform-services.md#cluster-sign-in-and-admins)).
+([cluster sign-in and admins](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/2a96b90291a23a9fbd044ca2e3decdba1e09fae4/docs/install/hub/00-platform-services.md#cluster-sign-in-and-admins)).
 
 ## 2. Check the infrastructure
 
@@ -37,7 +37,8 @@ provider. Never delete an identity provider, or the namespace that runs it, that
 RHOAI_QUAY_PULL_SECRET_FILE=QUAY_AUTH_FILE bash ../library/scripts/check-prerequisites.sh --step hub --context "$HUB_CONTEXT"
 ```
 
-Replace `QUAY_AUTH_FILE` with your container auth file with both registry logins, such as
+Replace `QUAY_AUTH_FILE` with your container auth file with both pre-release registry logins
+([before you start](01-before-you-start.md#3-accounts-and-credentials)), such as
 `~/.config/containers/auth.json`. The check only checks that the file exists.
 
 The output is similar to the following:

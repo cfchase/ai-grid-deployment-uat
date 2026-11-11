@@ -17,6 +17,37 @@ git -C ../library checkout -q "$(sed -n 's/^ *libraryRevision: *//p' root/kustom
 Replace `DEPLOYMENT_REPO_URL` with your deployment repository's clone URL. Run every command in this guide from the
 `deployment` directory.
 
+Check your prerequisites:
+
+```sh
+make prereqs
+```
+
+It checks your tools and that `../library` is at your pin. It changes nothing and never blocks. Checks whose input
+you haven't set yet print `skipped`; set them as you reach them, such as
+`make prereqs HUB_CONTEXT=hub QUAY_AUTH_FILE=~/.config/containers/auth.json`:
+
+- `HUB_CONTEXT` and `SITE_CONTEXT`: each cluster's kubeconfig context.
+- `QUAY_AUTH_FILE`: your container auth file with the pre-release registry logins.
+- `CATALOG_TOKEN_FILE`: your catalog token file, from part 2.
+
+The output is similar to the following:
+
+```text
+Tools
+ok       oc                               4.22.17
+ok       kustomize                        5.8.3
+MISSING  clusteradm                       imports the site into ACM
+...
+Hub cluster
+skipped  hub checks                       set HUB_CONTEXT to the hub's kubeconfig context
+...
+12 ok, 1 missing, 4 skipped
+Nothing was changed; fix these before the page that needs them.
+```
+
+Install any tool marked `MISSING` or `OLD` before you continue.
+
 ## 2. Create your catalog repository and its token
 
 The catalog repository holds your models and subscriptions: the hub delivers them to your sites, and the provider
@@ -74,8 +105,8 @@ Replace each `REQUIRED-` placeholder:
 | `tenant-idp/manifests/settings.yaml` | `REQUIRED-portalRedirectURI` | `https://maas.SITE_APPS_DOMAIN/*`, with the site's apps domain |
 
 Keep every other value. Each one is a tested choice: for what it means and how to change it, see
-[Appendix A: inputs and values](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/195ccd7ab783d5154549c597fef4b20dc12acd91/docs/install/appendix-a-inputs.md) and
-[Hub components](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/195ccd7ab783d5154549c597fef4b20dc12acd91/docs/install/hub/README.md#select-components).
+[Appendix A: inputs and values](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/2a96b90291a23a9fbd044ca2e3decdba1e09fae4/docs/install/appendix-a-inputs.md) and
+[Hub components](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/2a96b90291a23a9fbd044ca2e3decdba1e09fae4/docs/install/hub/README.md#select-components).
 
 ## 4. Check and push
 
