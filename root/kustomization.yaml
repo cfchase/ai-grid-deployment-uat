@@ -61,11 +61,11 @@ patches:
         value: &inputs
           libraryRepoURL: https://github.com/ai-grid-cloud/ai-grid-cluster-gitops.git
           libraryRevision: 9f4befd9e5716cea787c10661ddbf422a4999812
-          deploymentRepoURL: &deploymentRepoURL https://github.com/cfchase/ai-grid-deployment-uat.git
+          deploymentRepoURL: &deploymentRepoURL REQUIRED-deploymentRepoURL
           deploymentRevision: &deploymentRevision main
-          catalogRepoURL: https://github.com/cfchase/ai-grid-catalog-uat.git
+          catalogRepoURL: REQUIRED-catalogRepoURL
           catalogRevision: main
-          idpIssuerURL: https://keycloak-tenant-idp.apps.ocp.z9f4z.sandbox2934.opentlc.com/realms/tenants
+          idpIssuerURL: REQUIRED-idpIssuerURL
           idpClientID: ai-grid-tenants
           idpClientSecretNamespace: tenant-idp-client
           idpClientSecretName: tenant-idp-client
