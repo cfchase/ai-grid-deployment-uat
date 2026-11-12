@@ -3,8 +3,7 @@
 On this page you check the hub, install OpenShift GitOps, and apply your root. From then on, Argo CD installs
 everything from git.
 
-If the cluster ran an AI Grid hub before, uninstall that hub first
-([uninstall](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/56635b7ef08fcc5684272f4edc46d41903a3071a/docs/install/operate.md#uninstall)).
+If the cluster ran an AI Grid hub before, uninstall that hub first ([uninstall](08-uninstall.md)).
 
 ## 1. Check the infrastructure
 
@@ -13,7 +12,7 @@ RHOAI_QUAY_PULL_SECRET_FILE=QUAY_AUTH_FILE scripts/check-prerequisites.sh --step
 ```
 
 Replace `QUAY_AUTH_FILE` with your container auth file with both pre-release registry logins
-([before you start](01-before-you-start.md#3-accounts-and-credentials)), such as
+([before you start](01-before-you-start.md#3-registry-logins)), such as
 `~/.config/containers/auth.json`. The check only checks that the file exists.
 
 The output is similar to the following:
