@@ -12,7 +12,7 @@
 #                  and the object-storage Secret (apps/object-storage/README.md)
 #   --step spoke   a spoke (with no --cluster, the only site in clusters.yaml) before it joins ACM: OpenShift version, a default
 #                  StorageClass (the hub's policies deliver its pull secret),
-#                  and a previous install (a klusterlet, a DataScienceCluster,
+#                  and a previous install (a klusterlet, a DataScienceCluster, a model,
 #                  the OpenShift AI Subscription, grid objects)
 #   --expect-idp   the tenant IdP on this cluster: own (the deployment's own,
 #                  any OIDC provider) checks
@@ -43,11 +43,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 case "$step" in hub|spoke) ;; *) echo "--step must be hub or spoke" >&2; usage ;; esac
-if [ -z "$cluster" ] && [ -z "$kubeconfig" ] && [ "$step" = spoke ]; then cluster=site; fi
-if [ -n "$cluster" ]; then
+only_site=false; [ -z "$cluster" ] && [ -z "$kubeconfig" ] && [ "$step" = spoke ] && only_site=true
+if [ -n "$cluster" ] || $only_site; then
   . "$(dirname "$0")/clusters.sh"
   clusters_load "$(dirname "$0")/.." || exit 2
-  [ "$cluster" != site ] || cluster=$(site_name site) || exit 2
+  ! $only_site || cluster=$(site_name) || exit 2
   cluster_login_ok "$cluster" || exit 2
   kubeconfig=$(cluster_kubeconfig "$cluster")
 fi
@@ -111,14 +111,25 @@ if [ "$step" = spoke ]; then
   # A previous install: a klusterlet (another hub manages the cluster), a
   # DataScienceCluster, the OpenShift AI operator's Subscription, or grid
   # objects. Leftover CRDs alone are harmless.
-  found=()
-  oc_ get namespace open-cluster-management-agent -o name >/dev/null 2>&1 &&
-    found+=("klusterlet (namespace open-cluster-management-agent: a hub manages this cluster)")
+  found=() ours=false
+  if oc_ get namespace open-cluster-management-agent -o name >/dev/null 2>&1; then
+    # Your own hub, when it has this cluster as a joined ManagedCluster of the
+    # same name whose API URL is this cluster's api in clusters.yaml.
+    if [ -n "$cluster" ] && hub=$(hub_name) && cluster_login_ok "$hub" 2>/dev/null; then
+      mc=$(oc --kubeconfig "$(cluster_kubeconfig "$hub")" get managedcluster "$cluster" \
+        -o jsonpath='{.status.conditions[?(@.type=="ManagedClusterJoined")].status} {.spec.managedClusterClientConfigs[0].url}' 2>/dev/null || true)
+      [ "$mc" = "True $(cluster_field "$cluster" api | sed 's#/*$##')" ] || [ "$mc" = "True $(cluster_field "$cluster" api)" ] && ours=true
+    fi
+    $ours || found+=("klusterlet (namespace open-cluster-management-agent: another hub, or one this check can't match, manages this cluster)")
+  fi
   [ -n "$(oc_ get datascienceclusters -A -o name 2>/dev/null || true)" ] && found+=("DataScienceCluster")
   oc_ get subscriptions.operators.coreos.com rhods-operator -n redhat-ods-operator -o name >/dev/null 2>&1 &&
     found+=("Subscription redhat-ods-operator/rhods-operator")
   [ -n "$(oc_ get gridnetworks,gridsites -A -o name 2>/dev/null || true)" ] && found+=("GridNetwork or GridSite")
-  if [ ${#found[@]} -gt 0 ]; then
+  [ -n "$(oc_ get llminferenceservices -A -o name 2>/dev/null || true)" ] && found+=("LLMInferenceService")
+  if $ours; then
+    report OK "previous AI Grid install" "already a site of this hub"
+  elif [ ${#found[@]} -gt 0 ]; then
     report FOUND "previous AI Grid install" \
       "$(IFS=,; echo "${found[*]}" | sed 's/,/, /g'); follow \"Reuse a cluster from another hub\" (page 5) first"
   elif oc_ get crds -o name 2>/dev/null | grep -qE 'opendatahub\.io|kserve\.io|grid\.praxis\.fast'; then
