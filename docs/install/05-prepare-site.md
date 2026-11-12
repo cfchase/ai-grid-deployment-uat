@@ -1,25 +1,29 @@
 # Prepare the site and join it to ACM
 
-On this page you check the site and import it into ACM. Set the site's name from your `clusters.yaml` first:
-
-```sh
-export SITE=SITE_NAME
-```
-
-Replace `SITE_NAME` with the site's name in `clusters.yaml`, such as `site-east-1`. It becomes the site's ACM cluster name.
+On this page you check the site and import it into ACM. The site's name in `clusters.yaml` becomes its ACM cluster
+name. These commands work on the only site in your `clusters.yaml`. With several sites, give the site's name where
+a command says `site`, or add it after the script's name, such as `scripts/import-site.sh SITE_NAME`.
 
 If the cluster was a site of another hub, first [reuse it](#reuse-a-cluster-from-another-hub).
 
 ## Reuse a cluster from another hub
 
-Skip this section for a cluster that was never an AI Grid site.
+Let the site check tell you whether you need this section:
+
+```sh
+scripts/check-prerequisites.sh --step spoke
+```
+
+If its `previous AI Grid install` line is `OK` (`none`, or `leftover CRDs only; safe`), skip to part 1. If it's
+`FOUND`, it names what it found, such as a klusterlet (another hub manages the cluster) or a DataScienceCluster;
+follow these steps first:
 
 1. On the old hub, remove the site's labels, wait for its Applications to go, then delete its ManagedCluster. Delete
    its Argo CD cluster Secret and grid identity Secret (`redhat-ai-grid/grid-site-SITE`) if they stay behind.
 2. Preview the wipe of the old install:
 
    ```sh
-   scripts/wipe-site.sh --kubeconfig ".config/$SITE/kubeconfig" --dry-run
+   scripts/wipe-site.sh --dry-run
    ```
 
    Read the list. It must not name your platform's identity provider, cert-manager, NFD, the GPU operator or your
@@ -31,46 +35,49 @@ Skip this section for a cluster that was never an AI Grid site.
 You should then see no DataScienceCluster, GridNetwork, GridSite or LLMInferenceService:
 
 ```sh
-scripts/with-cluster.sh "$SITE" oc get datasciencecluster,gridnetworks,gridsites,llminferenceservices -A
+scripts/with-cluster.sh site oc get datasciencecluster,gridnetworks,gridsites,llminferenceservices -A
 ```
 
 ## 1. Check the site's infrastructure
 
 ```sh
-scripts/check-prerequisites.sh --step spoke --cluster "$SITE"
-dig AAAA router-default.$(scripts/with-cluster.sh "$SITE" oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
+scripts/check-prerequisites.sh --step spoke
+dig AAAA router-default.$(scripts/with-cluster.sh site oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
 ```
 
-You should see `OK` for `OpenShift 4.21 or later` and `default StorageClass`, and a `dig` status other than
+You should see `OK` for `OpenShift 4.21 or later`, `default StorageClass` and `previous AI Grid install`, and a
+`dig` status other than
 `NXDOMAIN`. The hub delivers the registry logins and image mirror once the site is imported. For GPU sites, see
 [GPU operator and NFD](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/f5dfd38e2f7c949b2d198476a4e3c5602186aee7/docs/install/spokes/openshift-ai.md#nvidia-gpu-operator-and-node-feature-discovery).
 
 ## 2. Import the site into ACM
 
-`scripts/import-site.sh` runs the library's import script, which runs `clusteradm` against both clusters. It prints a
-summary and changes nothing without `--yes`:
+Import the site:
 
 ```sh
-scripts/import-site.sh "$SITE"
+scripts/import-site.sh
 ```
 
-Read the summary, then run the same command with `--yes` added.
+It runs the library's import script, which runs `clusteradm` against both clusters. It prints a summary of what it
+will do and asks `Import SITE now? [y/N]`; read the summary and answer `y`. Any other answer changes nothing.
 
-The site joins ACM, and the hub's Argo CD registers it. Nothing AI Grid installs yet: that waits for the labels you
-add on the next page.
+The site joins ACM, and the hub's Argo CD registers it. The hub then prepares the site: it creates empty namespaces
+for OpenShift AI and the grid, delivers the registry logins, labels the Submariner gateway nodes and starts
+Submariner. OpenShift AI and the grid wait for the labels you add on the next page.
 
-## 3. Check the import
+The import ends with `Import complete.` once the ManagedCluster has joined and the hub's Argo CD has its cluster
+Secret for the site; the script waits for both.
+
+To check the site's ManagedCluster again later:
 
 ```sh
-scripts/with-cluster.sh hub oc get managedcluster "$SITE"
-scripts/with-cluster.sh hub oc get secret -n openshift-gitops -l argocd.argoproj.io/secret-type=cluster | grep "$SITE"
+scripts/with-cluster.sh hub oc get managedcluster "$(scripts/clusters.sh --site)"
 ```
 
-You should see the ManagedCluster with `JOINED` and `AVAILABLE` both `True`, and an Argo CD cluster Secret for the
-site, within a few minutes.
+You should see `JOINED` and `AVAILABLE` both `True`.
 
 ## Checkpoint
 
-- The site's ManagedCluster is joined and available, and its Argo CD cluster Secret exists on the hub.
+- The import printed `Import complete.`
 
 Next: [6. Join the site to the grid](06-join-grid.md)

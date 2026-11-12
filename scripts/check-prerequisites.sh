@@ -10,8 +10,10 @@
 #                  version, a default StorageClass, cert-manager's CRDs, the
 #                  quay.io/rhoai pull-secret file ($RHOAI_QUAY_PULL_SECRET_FILE)
 #                  and the object-storage Secret (apps/object-storage/README.md)
-#   --step spoke   a spoke before it joins ACM: OpenShift version and a default
-#                  StorageClass (the hub's policies deliver its pull secret)
+#   --step spoke   a spoke (with no --cluster, the only site in clusters.yaml) before it joins ACM: OpenShift version, a default
+#                  StorageClass (the hub's policies deliver its pull secret),
+#                  and a previous install (a klusterlet, a DataScienceCluster,
+#                  the OpenShift AI Subscription, grid objects)
 #   --expect-idp   the tenant IdP on this cluster: own (the deployment's own,
 #                  any OIDC provider) checks
 #                  the tenant Policy's two IdP inputs on this cluster: the
@@ -21,11 +23,11 @@
 #                  Deployment) adds no check, since what it needs are
 #                  components (apps/maas-db, apps/external-secrets)
 #
-# Prints OK or MISSING per check and exits 1 if anything is MISSING, 2 on bad
-# usage. A key is checked for presence only; its value is never printed.
+# Prints OK, MISSING or FOUND per check and exits 1 if anything isn't OK, 2 on
+# bad usage. A key is checked for presence only; its value is never printed.
 set -Eeuo pipefail
 
-usage() { sed -n '5,25p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '5,27p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 step="" kubeconfig="" cluster="" idp="" idp_secret="" idp_ca=""
 while [ $# -gt 0 ]; do
@@ -41,9 +43,12 @@ while [ $# -gt 0 ]; do
   esac
 done
 case "$step" in hub|spoke) ;; *) echo "--step must be hub or spoke" >&2; usage ;; esac
+if [ -z "$cluster" ] && [ -z "$kubeconfig" ] && [ "$step" = spoke ]; then cluster=site; fi
 if [ -n "$cluster" ]; then
   . "$(dirname "$0")/clusters.sh"
-  clusters_load "$(dirname "$0")/.." && cluster_login_ok "$cluster" || exit 2
+  clusters_load "$(dirname "$0")/.." || exit 2
+  [ "$cluster" != site ] || cluster=$(site_name site) || exit 2
+  cluster_login_ok "$cluster" || exit 2
   kubeconfig=$(cluster_kubeconfig "$cluster")
 fi
 [ -f "$kubeconfig" ] || { echo "--cluster or --kubeconfig is required" >&2; usage; }
@@ -99,6 +104,27 @@ if [ "$step" = hub ]; then
     report OK "object storage" "open-cluster-management-observability/thanos-object-storage"
   else
     report MISSING "object storage" "Secret open-cluster-management-observability/thanos-object-storage (apps/object-storage)"
+  fi
+fi
+
+if [ "$step" = spoke ]; then
+  # A previous install: a klusterlet (another hub manages the cluster), a
+  # DataScienceCluster, the OpenShift AI operator's Subscription, or grid
+  # objects. Leftover CRDs alone are harmless.
+  found=()
+  oc_ get namespace open-cluster-management-agent -o name >/dev/null 2>&1 &&
+    found+=("klusterlet (namespace open-cluster-management-agent: a hub manages this cluster)")
+  [ -n "$(oc_ get datascienceclusters -A -o name 2>/dev/null || true)" ] && found+=("DataScienceCluster")
+  oc_ get subscriptions.operators.coreos.com rhods-operator -n redhat-ods-operator -o name >/dev/null 2>&1 &&
+    found+=("Subscription redhat-ods-operator/rhods-operator")
+  [ -n "$(oc_ get gridnetworks,gridsites -A -o name 2>/dev/null || true)" ] && found+=("GridNetwork or GridSite")
+  if [ ${#found[@]} -gt 0 ]; then
+    report FOUND "previous AI Grid install" \
+      "$(IFS=,; echo "${found[*]}" | sed 's/,/, /g'); follow \"Reuse a cluster from another hub\" (page 5) first"
+  elif oc_ get crds -o name 2>/dev/null | grep -qE 'opendatahub\.io|kserve\.io|grid\.praxis\.fast'; then
+    report OK "previous AI Grid install" "leftover CRDs only; safe"
+  else
+    report OK "previous AI Grid install" "none"
   fi
 fi
 
