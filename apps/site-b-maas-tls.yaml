@@ -1,0 +1,22 @@
+# Delivers sites/site-b/maas-tls to site site-b: a publicly trusted certificate for
+# its MaaS gateway, which values/clusters/site-b/rhoai.yaml points the gateway's
+# HTTPS listener at. Copy per ingress or combined site
+# (docs/install/06-join-grid.md).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: site-b-maas-tls
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: '@deploymentRepoURL@'
+    targetRevision: '@deploymentRevision@'
+    path: sites/site-b/maas-tls
+  destination:
+    server: https://cluster-proxy-addon-user.multicluster-engine.svc.cluster.local:9092/site-b
+    namespace: openshift-ingress
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
