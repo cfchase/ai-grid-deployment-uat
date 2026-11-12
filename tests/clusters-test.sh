@@ -97,11 +97,11 @@ t "login skips working logins" 0 "hub: already logged in" bash -c 'PATH="$1:$PAT
 t "login leaves a working hub login alone" 1 "^0$" grep -c "login --server https://api.hub" "$STUB_LOG"
 : > "$STUB_LOG"
 t "join-site labels from the file" 0 "oc label managedcluster site-c ai-grid/enabled=true ai-grid/role=inference location=us-west --overwrite" \
-  bash -c 'PATH="$1:$PATH" "$0/scripts/join-site.sh" site-c; cat "$STUB_LOG"' "$d" "$T/bin"
-t "join-site with several sites needs a name" 1 "name a site: site-b, site-c" env PATH="$T/bin:$PATH" "$d/scripts/join-site.sh"
+  bash -c 'PATH="$1:$PATH" JOIN_SITE_NO_WAIT=1 "$0/scripts/join-site.sh" site-c; cat "$STUB_LOG"' "$d" "$T/bin"
+t "join-site with several sites needs a name" 1 "name a site: site-b, site-c" env PATH="$T/bin:$PATH" JOIN_SITE_NO_WAIT=1 "$d/scripts/join-site.sh"
 mkdir -p "$d1/.config/hub" "$d1/.config/site-b"; : > "$d1/.config/hub/kubeconfig"; : > "$d1/.config/site-b/kubeconfig"; : > "$STUB_LOG"
 t "join-site with one site needs no name" 0 "oc label managedcluster site-b ai-grid/enabled=true ai-grid/role=combined location=us-east" \
-  bash -c 'PATH="$1:$PATH" "$0/scripts/join-site.sh"; cat "$STUB_LOG"' "$d1" "$T/bin"
+  bash -c 'PATH="$1:$PATH" JOIN_SITE_NO_WAIT=1 "$0/scripts/join-site.sh"; cat "$STUB_LOG"' "$d1" "$T/bin"
 t "with-cluster site is the only site" 0 "KUBECONFIG=$d1/.config/site-b/kubeconfig oc get nodes" \
   bash -c 'PATH="$1:$PATH" "$0/scripts/with-cluster.sh" site oc get nodes; cat "$STUB_LOG"' "$d1" "$T/bin"
 t "with-cluster site with several sites" 1 "name a site: site-b, site-c" env PATH="$T/bin:$PATH" "$d/scripts/with-cluster.sh" site oc get nodes
@@ -114,7 +114,7 @@ t "site check with one site needs no name" 0 "KUBECONFIG=$d1/.config/site-b/kube
   bash -c 'PATH="$1:$PATH" "$0/scripts/check-prerequisites.sh" --step spoke; cat "$STUB_LOG"' "$d1" "$T/bin"
 t "check-revisions without a hub login" 1 "no login for hub|login expired" env PATH="$T/bin:$PATH" LIBRARY=/nonexistent bash -c 'rm -f "$0/.config/hub/kubeconfig"; "$0/scripts/check-revisions.sh"' "$d"
 : > "$d/.config/hub/kubeconfig"
-t "join-site refuses the hub" 1 "hub is the hub" env PATH="$T/bin:$PATH" "$d/scripts/join-site.sh" hub
+t "join-site refuses the hub" 1 "hub is the hub" env PATH="$T/bin:$PATH" JOIN_SITE_NO_WAIT=1 "$d/scripts/join-site.sh" hub
 
 # import-site.sh merges two kubeconfigs whose names collide (both "admin")
 # into contexts hub and site, each keeping its own server and credentials.
@@ -149,14 +149,20 @@ STUB
 cat > "$T/cbin/curl" <<'STUB'
 #!/bin/bash
 echo "curl $*" >> "$STUB_DIR/curl.log"
-for a in "$@"; do case "$a" in @*) cat "${a#@}" >> "$STUB_DIR/curl.log" ;; esac; done
-echo '{"items":[]}'; echo "HTTP 200"
+out="" prev=""
+for a in "$@"; do case "$a" in @*) cat "${a#@}" >> "$STUB_DIR/curl.log" ;; esac; [ "$prev" = -o ] && out=$a; prev=$a; done
+echo '{"object":{"id":"org-1"}}' > "$out"; cat "$STUB_DIR/code" 2>/dev/null || printf 200
 STUB
 chmod +x "$T/cbin/oc" "$T/cbin/curl"; : > "$T/curl.log"
 t "console-call calls the console's Route" 0 "HTTP 200" env PATH="$T/cbin:$PATH" "$d/scripts/console-call.sh" ai_grid.v1.Clusters/List
 t "  ... with the hub login's token in a header file" 0 "Authorization: Bearer sha256~FAKE_console_token" cat "$T/curl.log"
 t "  ... never on the command line" 1 "^0$" bash -c 'grep "^curl " "$0" | grep -c FAKE_console_token' "$T/curl.log"
 t "  ... at the console's host and method" 0 "https://console.apps.hub.example.com/ai_grid.v1.Clusters/List" cat "$T/curl.log"
+t "  ... prints only the reply on stdout when piped, for jq" 0 "^org-1$" \
+  bash -c 'PATH="$0:$PATH" "$1/scripts/console-call.sh" ai_grid.v1.Tenants/Create 2>/dev/null | jq -r .object.id' "$T/cbin" "$d"
+printf 403 > "$T/code"
+t "  ... and fails on an error status" 1 "HTTP 403" env PATH="$T/cbin:$PATH" "$d/scripts/console-call.sh" ai_grid.v1.Tenants/Create
+rm "$T/code"
 touch "$T/no-token"
 t "console-call without a token says how to get one" 1 "make login NAME=hub" env PATH="$T/cbin:$PATH" "$d/scripts/console-call.sh" ai_grid.v1.Clusters/List
 rm "$T/no-token"
