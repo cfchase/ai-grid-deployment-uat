@@ -11,19 +11,19 @@
 # Reference: the library's docs/install/appendix-a-inputs.md ("Inputs").
 - op: replace
   path: /spec/generators/0/git/values/deploymentRepoURL
-  value: &deploymentRepoURL REQUIRED-deploymentRepoURL
+  value: &deploymentRepoURL https://github.com/cfchase/ai-grid-deployment-uat.git
 - op: replace
   path: /spec/generators/0/git/values/deploymentRevision
   value: &deploymentRevision main
 - op: replace
   path: /spec/generators/0/git/values/catalogRepoURL
-  value: &catalogRepoURL REQUIRED-catalogRepoURL
+  value: &catalogRepoURL https://github.com/cfchase/ai-grid-catalog-uat.git
 - op: replace
   path: /spec/generators/0/git/values/catalogRevision
   value: &catalogRevision main
 - op: replace
   path: /spec/generators/0/git/values/idpIssuerURL
-  value: &idpIssuerURL REQUIRED-idpIssuerURL
+  value: &idpIssuerURL https://keycloak-tenant-idp.apps.ocp.z9f4z.sandbox2934.opentlc.com/realms/tenants
 
 # The same values on this deployment's own apps generator (generators/1).
 - { op: replace, path: /spec/generators/1/git/repoURL, value: *deploymentRepoURL }
