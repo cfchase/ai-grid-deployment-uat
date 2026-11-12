@@ -9,8 +9,10 @@ at your pin (scripts/library.sh).
 
 The clusters come from the deployment's clusters.yaml, each with its login in
 .config/NAME/kubeconfig. Each option also reads an environment variable:
-QUAY_AUTH_FILE, CATALOG_TOKEN_FILE and LIBRARY. A check whose input you haven't set
-prints "skipped". Every line is: status, name, detail. Statuses: ok, MISSING,
+QUAY_AUTH_FILE, CATALOG_TOKEN_FILE and LIBRARY. Unset, QUAY_AUTH_FILE is the first of
+~/.config/containers/auth.json and $XDG_RUNTIME_DIR/containers/auth.json that exists,
+and CATALOG_TOKEN_FILE is ~/.ai-grid/catalog-token if it exists. A check whose input
+you haven't set prints "skipped". Every line is: status, name, detail. Statuses: ok, MISSING,
 OLD, FAIL, skipped. Cluster checks are read-only (get, whoami, auth can-i).
 The registry check runs "oc image info" with your auth file; it never prints a
 credential. The exit code is always 0.
@@ -33,9 +35,8 @@ OC_TIMEOUT = "--request-timeout=10s"
 
 # name, version command (None: no cheap version), what it's used for
 TOOLS = [
-    ("oc", ["oc", "version", "--client"], "the OpenShift CLI: every page"),
+    ("oc", ["oc", "version", "--client"], "the OpenShift CLI, which also renders your root (oc kustomize): every page"),
     ("kubectl", ["kubectl", "version", "--client"], "comes with oc: every page"),
-    ("kustomize", ["kustomize", "version"], "renders your deployment repository's root (version 5 or later)"),
     ("git", ["git", "--version"], "clones and pushes your repositories"),
     ("jq", ["jq", "--version"], "used by the setup scripts and in first use"),
     ("curl", ["curl", "--version"], "used by the setup scripts and in first use"),
@@ -107,9 +108,7 @@ def check_tools():
             continue
         rc, out, err = run(cmd, timeout=5)
         m = version_of(out + err)
-        if name == "kustomize" and m and int(m.group(1)) < 5:
-            report("OLD", name, f"{m.group(0).lstrip('v')}; version 5 or later needed")
-        elif m:
+        if m:
             report("ok", name, m.group(0).lstrip("v"))
         else:
             report("ok", name, path)
@@ -166,7 +165,9 @@ def check_registry(auth_file):
     section("Registry logins (pre-release builds)")
     names = ["auth file", "quay.io/rhoai login", "registry.stage.redhat.io login", "pull the pinned catalog"]
     if not auth_file:
-        report("skipped", "registry logins", "set QUAY_AUTH_FILE to your container auth file (page 3)")
+        report("skipped", "registry logins",
+               "no auth file at ~/.config/containers/auth.json or $XDG_RUNTIME_DIR/containers/auth.json; "
+               "set QUAY_AUTH_FILE to yours")
         return
     auth_file = os.path.expanduser(auth_file)
     try:
@@ -202,9 +203,10 @@ def check_registry(auth_file):
     else:
         report("MISSING", "quay.io/rhoai login", "no quay.io/rhoai or quay.io entry with an auth value")
     if has("registry.stage.redhat.io"):
-        report("ok", "registry.stage.redhat.io login", "entry present (model runtime images)")
+        report("ok", "registry.stage.redhat.io login", "entry present (optional: nightly-only runtime images)")
     else:
-        report("MISSING", "registry.stage.redhat.io login", "sites can't pull registry.redhat.io/rhaii* images")
+        report("ok", "registry.stage.redhat.io login",
+               "none; optional: only nightly-only runtime images need it")
 
     image = pinned_catalog_image()
     if not image:
@@ -331,7 +333,8 @@ def check_cluster(name, role, kubeconfig):
 def check_catalog_token(path):
     section("Catalog token")
     if not path:
-        report("skipped", "catalog token file", "set CATALOG_TOKEN_FILE (page 2)")
+        report("skipped", "catalog token file",
+               "no ~/.ai-grid/catalog-token yet (page 2, part 2); or set CATALOG_TOKEN_FILE")
         return
     path = os.path.expanduser(path)
     try:
@@ -348,15 +351,28 @@ def check_catalog_token(path):
         report("ok", "catalog token file", f"{path} (mode {mode:o}, not empty)")
 
 
+def first_existing(*paths):
+    """The first of paths that is a file, or None."""
+    return next((p for p in paths if p and os.path.isfile(p)), None)
+
+
+def default_auth_file():
+    run_dir = os.environ.get("XDG_RUNTIME_DIR")
+    return first_existing(os.path.expanduser("~/.config/containers/auth.json"),
+                          run_dir and os.path.join(run_dir, "containers", "auth.json"))
+
+
 def main():
     global LIB
     p = argparse.ArgumentParser(
         description="Report which AI Grid install prerequisites you have. Never blocks; always exits 0.")
     p.add_argument("--deployment", default=REPO, help="your deployment repository (default: this one)")
     p.add_argument("--library", default=LIB, help="your library checkout (default: .library) [LIBRARY]")
-    p.add_argument("--quay-auth-file", default=os.environ.get("QUAY_AUTH_FILE"),
-                   help="container auth file with the pre-release registry logins [QUAY_AUTH_FILE]")
-    p.add_argument("--catalog-token-file", default=os.environ.get("CATALOG_TOKEN_FILE"),
+    p.add_argument("--quay-auth-file", default=os.environ.get("QUAY_AUTH_FILE") or default_auth_file(),
+                   help="container auth file with your quay.io login [QUAY_AUTH_FILE]")
+    p.add_argument("--catalog-token-file",
+                   default=(os.environ.get("CATALOG_TOKEN_FILE")
+                            or first_existing(os.path.expanduser("~/.ai-grid/catalog-token"))),
                    help="file holding the catalog repository token [CATALOG_TOKEN_FILE]")
     a = p.parse_args()
     LIB = a.library

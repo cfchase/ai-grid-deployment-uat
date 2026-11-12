@@ -22,7 +22,8 @@ repository, set the names that must be yours, check the result, and push it.
 
    In `clusters.yaml`, replace each `REQUIRED-` value: the hub's API URL, and the site's name, location and API URL.
    Keep the hub's name, `hub`, and the site's role, `combined`: the guide's commands use them. To find a cluster's
-   API URL, run `oc whoami --show-server` while logged in to it. For example:
+   API URL, open its web console, click your user name > **Copy login command**, and read the `--server=` value, or
+   take it from the cluster installer's output. For example:
 
    ```yaml
    apiVersion: ai-grid.dev/v1alpha1
@@ -38,7 +39,7 @@ repository, set the names that must be yours, check the result, and push it.
    ```
 
    The site's name becomes its ACM cluster name, and you can't change it once the site is imported. Commit
-   `clusters.yaml` with your other changes in part 4; it records which clusters make up your grid, and holds no
+   `clusters.yaml` with your other changes in part 5; it records which clusters make up your grid, and holds no
    secrets.
 
 3. Log in to each cluster as a `cluster-admin` user:
@@ -52,37 +53,6 @@ repository, set the names that must be yours, check the result, and push it.
    Clusters you're still logged in to are skipped. When one login expires later, run `make login` again, or
    `make login NAME=hub` for one cluster. To use a kubeconfig you already have instead, such as the installer's
    `auth/kubeconfig`, copy it to `.config/NAME/kubeconfig`.
-
-4. Check your prerequisites:
-
-   ```sh
-   make prereqs QUAY_AUTH_FILE=QUAY_AUTH_FILE
-   ```
-
-   Replace `QUAY_AUTH_FILE` with your container auth file with the pre-release registry logins, such as
-   `~/.config/containers/auth.json`. Add `CATALOG_TOKEN_FILE=~/.ai-grid/catalog-token` after part 2.
-
-   It checks your tools, each cluster in `clusters.yaml`, and your registry logins, and fetches the library at your pin
-   into `.library/`, which git ignores. The scripts in `scripts/` use it. It changes nothing on your clusters and
-   never blocks; checks whose input you haven't set yet print `skipped`. The output is similar to the following:
-
-   ```text
-   Tools
-   ok       oc                               4.22.17
-   MISSING  clusteradm                       imports the site into ACM
-   ...
-   Hub hub
-   ok       reachable                        https://api.hub.example.com:6443
-   ok       OpenShift 4.21 or later          4.22.18
-   ...
-   Site site-east-1 (combined)
-   ok       ClusterIssuer                    letsencrypt-dns (DNS-01)
-   ...
-   20 ok, 1 missing, 1 skipped
-   Nothing was changed; fix these before the page that needs them.
-   ```
-
-   Install any tool marked `MISSING` or `OLD` before you continue.
 
 ## 2. Create your catalog repository and its token
 
@@ -118,38 +88,80 @@ console writes them there with a token that can write only this repository.
 3. Save the token to a file outside your repository that only you can read, and never commit it:
 
    ```sh
-   mkdir -p ~/.ai-grid && install -m 600 /dev/null ~/.ai-grid/catalog-token
+   mkdir -p ~/.ai-grid && (umask 077 && printf 'Paste the token: ' && read -rs t && printf '%s' "$t" > ~/.ai-grid/catalog-token && echo)
    ```
 
-   Paste the token into `~/.ai-grid/catalog-token` with an editor. You use it in
+   It asks for the token without showing it, and writes it to `~/.ai-grid/catalog-token`, readable only by you. Paste
+   the token and press Enter. You use it in
    [install the hub components](04-hub-components.md#2-create-the-consoles-secrets).
 
-## 3. Set your names
+## 3. Check your prerequisites
 
-Find each cluster's apps domain:
+Check your tools, each cluster in `clusters.yaml`, your registry logins and your catalog token:
 
 ```sh
-scripts/with-cluster.sh NAME oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}{"\n"}'
+make prereqs
 ```
 
-Replace `NAME` with the cluster's name in `clusters.yaml`, such as `hub`. The output is similar to
-`apps.hub.example.com`.
+It reads your registry logins from `~/.config/containers/auth.json`, or from `$XDG_RUNTIME_DIR/containers/auth.json`
+when that's where `podman login` saved them, and your catalog token from `~/.ai-grid/catalog-token`. To use another
+auth file, add `QUAY_AUTH_FILE=AUTH_FILE`. It also fetches the library at your pin into `.library/`, which git
+ignores; the scripts in `scripts/` use it. It changes nothing on your clusters and never blocks. The output is similar
+to the following:
 
-Replace each `REQUIRED-` placeholder:
+```text
+Tools
+ok       oc                               4.22.17
+MISSING  clusteradm                       imports the site into ACM
+...
+Registry logins (pre-release builds)
+ok       auth file                        /home/user/.config/containers/auth.json
+ok       quay.io/rhoai login              quay.io/rhoai entry
+...
+Hub hub
+ok       reachable                        https://api.hub.example.com:6443
+ok       OpenShift 4.21 or later          4.22.18
+...
+Site site-east-1 (combined)
+ok       ClusterIssuer                    letsencrypt-dns (DNS-01)
+...
+Catalog token
+ok       catalog token file               /home/user/.ai-grid/catalog-token (mode 600, not empty)
 
-| File | Placeholder | Set it to |
+24 ok, 1 missing
+Nothing was changed; fix these before the page that needs them.
+```
+
+Install any tool marked `MISSING` before you continue.
+
+## 4. Set your names
+
+Set the values that name your repositories and hosts:
+
+```sh
+scripts/set-inputs.sh CATALOG_REPO_URL
+```
+
+Replace `CATALOG_REPO_URL` with your catalog repository's URL, such as
+`https://github.com/my-org/ai-grid-catalog.git`. The script replaces only these `REQUIRED-` placeholders, reads the
+apps domains through your cluster logins, prints each value it sets, and then runs `scripts/check-deployment.sh`:
+
+| File | Value | Set to |
 |---|---|---|
-| `root/kustomization.yaml` | `REQUIRED-deploymentRepoURL` | Your deployment repository's URL, such as `https://github.com/my-org/ai-grid-deployment.git` |
-| `root/kustomization.yaml` | `REQUIRED-catalogRepoURL` | Your catalog repository's URL, such as `https://github.com/my-org/ai-grid-catalog.git` |
-| `root/kustomization.yaml` | `REQUIRED-idpIssuerURL` | `https://keycloak-tenant-idp.HUB_APPS_DOMAIN/realms/tenants`, with the hub's apps domain |
-| `root/self.yaml` | `REQUIRED-deploymentRepoURL` | Your deployment repository's URL, as in `root/kustomization.yaml` |
-| `tenant-idp/manifests/settings.yaml` | `REQUIRED-portalRedirectURI` | `https://maas.SITE_APPS_DOMAIN/*`, with the site's apps domain |
+| `root/kustomization.yaml` | `deploymentRepoURL` | Your deployment repository's URL, from `git remote get-url origin` |
+| `root/kustomization.yaml` | `catalogRepoURL` | `CATALOG_REPO_URL` |
+| `root/kustomization.yaml` | `idpIssuerURL` | `https://keycloak-tenant-idp.HUB_APPS_DOMAIN/realms/tenants`, with the hub's apps domain |
+| `root/self.yaml` | `repoURL` | Your deployment repository's URL |
+| `tenant-idp/manifests/settings.yaml` | `portalRedirectURI` | `https://maas.SITE_APPS_DOMAIN/*`, with the apps domain of the first `combined` or `ingress` site |
+
+The `REQUIRED-libraryRepoURL` and `REQUIRED-libraryRevision` in the root's `op: test` lines stay: they check the
+library's files, not yours. A value that's already set is kept, so you can run the script again.
 
 Keep every other value. Each one is a tested choice: for what it means and how to change it, see
-[Appendix A: inputs and values](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/d5021fa2080d013732825da29d1d2714d9eb0c54/docs/install/appendix-a-inputs.md) and
-[Hub components](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/d5021fa2080d013732825da29d1d2714d9eb0c54/docs/install/hub/README.md#select-components).
+[Appendix A: inputs and values](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/4aa1c997d86e88955e3e4ea3017e74bdaa100988/docs/install/appendix-a-inputs.md) and
+[Hub components](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/4aa1c997d86e88955e3e4ea3017e74bdaa100988/docs/install/hub/README.md#select-components).
 
-## 4. Check and push
+## 5. Check and push
 
 1. Check your repository:
 
@@ -160,11 +172,13 @@ Keep every other value. Each one is a tested choice: for what it means and how t
    You should see `root renders; every input is set; every repository is an input.` If you see
    `unset inputs:` or `placeholders left in your files:`, set the values it names and run it again.
 
-2. Commit and push:
+2. Commit your clusters file and the files `scripts/set-inputs.sh` changed, and push:
 
    ```sh
-   git add -A && git commit -m "deployment: set our names" && git push origin HEAD:main
+   git add clusters.yaml root tenant-idp && git commit -m "deployment: set our names" && git push origin HEAD:main
    ```
+
+   Run `git status` first if you changed anything else.
 
 ## Checkpoint
 
