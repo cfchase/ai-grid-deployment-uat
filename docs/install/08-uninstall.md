@@ -63,16 +63,20 @@ step deletes last. If your own apps leave something behind, add a line for it th
 
 So a reinstall starts with no models or subscriptions, remove them from your catalog repository. In the provider
 console, delete each subscription, then each model
-([remove a subscription, model or organization](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/f5dfd38e2f7c949b2d198476a4e3c5602186aee7/docs/install/operate.md#remove-a-subscription-model-or-organization)).
-Or empty it in git:
+([remove a subscription, model or organization](https://github.com/ai-grid-cloud/ai-grid-cluster-gitops/blob/9f4befd9e5716cea787c10661ddbf422a4999812/docs/install/operate.md#remove-a-subscription-model-or-organization)).
+Or empty it in git. Preview what that removes from the catalog repository named in `root/inputs.env`: every file
+but `README.md`. It changes nothing:
 
 ```sh
-git clone CATALOG_REPO_URL catalog && cd catalog
-git rm -r -q -- $(git ls-files | grep -vx README.md)
-git commit -m "catalog: empty for uninstall" && git push origin HEAD:main && cd ..
+make empty-catalog
 ```
 
-Replace `CATALOG_REPO_URL` with your catalog repository's clone URL.
+Remove them. This commits `catalog: empty for uninstall` in a temporary clone and pushes it with your git
+credentials:
+
+```sh
+make empty-catalog CONFIRM=1
+```
 
 Within a few minutes the hub deletes the catalog's Applications, and with them the subscriptions, auth policies and
 MaaS model entries, so no access outlives them. The models themselves keep running: the models ApplicationSet keeps
@@ -145,8 +149,9 @@ The site step does the following:
    console plugins whose backend is gone.
 7. Checks that your login still works and is `cluster-admin`.
 
-A site takes about 15 minutes, most of it removing the DataScienceCluster and the operators. The output ends with
-`== done`.
+A site takes 15 to 25 minutes, most of it removing the DataScienceCluster and the operators. The output ends with
+`== done`. Item 2 can print `warning: Submariner on SITE still present after 600s`; the run goes on, and item 5
+deletes Submariner's namespace.
 
 ## 4. Uninstall the hub
 
@@ -179,13 +184,13 @@ A hub takes about 25 minutes, most of it removing MultiClusterHub, the multiclus
 
 ## 5. Verify
 
-Check each cluster's Argo CD Application kind, the install's namespaces and your sign-in:
+Check each cluster for Argo CD Applications, the install's namespaces and your sign-in:
 
 ```sh
 make uninstall-check
 ```
 
-For each cluster you should see `Argo CD Application kind: gone`, `Install namespaces left: none`, and your platform's
+For each cluster you should see `Argo CD Applications: none`, `Install namespaces left: none`, and your platform's
 identity providers. Then sign in once to the cluster's web console.
 
 To reinstall, start again at [set up your deployment repository](02-repositories.md), with the same or new
@@ -194,5 +199,5 @@ repositories.
 ## Checkpoint
 
 - Every site's and the hub's uninstall ended with `== done`.
-- No cluster has the Argo CD Application kind or a namespace from the list in [verify](#5-verify).
+- No cluster has an Argo CD Application or a namespace from the list in [verify](#5-verify).
 - You can sign in to each cluster's web console.
